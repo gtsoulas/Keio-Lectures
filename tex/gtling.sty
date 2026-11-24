@@ -1,0 +1,411 @@
+%% gtling.sty -- George Tsoulas's linguistics toolkit
+%%
+%% Shared core for gtarticle, gtbook and beamer talks (colblanc theme):
+%% packages for examples, trees, bibliography and tables, plus the
+%% personal command set (semantics, glossing, revision markup, ...).
+%%
+%% Engine: LuaLaTeX.
+%%
+%% Usage:
+%%   gtarticle / gtbook load this automatically (pass options to the class).
+%%   Talks:   \documentclass[aspectratio=169]{beamer}
+%%            \usetheme{colblanc}            % or \usetheme[dark]{colblanc}
+%%            \usepackage[bib=biblatex]{gtling}
+%%
+%% Options (key=value; defaults first):
+%%   examples = linguex | expex | gb4e | none
+%%   trees    = forest | none
+%%   minsyn   = false | true          minimalist workspace derivations
+%%   bib      = natbib | biblatex | none
+%%   bibstyle = <style>               default chicago (natbib) / authoryear (biblatex)
+%%   bibfile  = fbib                  comma list, no .bib extension
+%%   notes    = show | hide           revision markup; `final' = notes=hide
+%%   semindex = {}                    default superscript of \sem, e.g. {M,g}
+%%   tipa     = false | true
+%%   glosses  = true | false          gloss abbreviations \nom, \acc, ...
+%%   lang     = british               babel main language (none = no babel)
+%%   greek    = true | false          load Greek for babel
+%%
+%% Full documentation: texdoc gtling-manual (doc/gtling-manual.pdf).
+%%
+%% Copyright (C) 2026 George Tsoulas. LPPL 1.3c or later.
+
+\NeedsTeXFormat{LaTeX2e}[2023/06/01]
+\ProvidesPackage{gtling}[2026/10/15 v1.0 GT linguistics toolkit]
+
+% -----------------------------------------------------------------------
+% Options
+% -----------------------------------------------------------------------
+\newif\ifgtl@notes    \gtl@notestrue
+\newif\ifgtl@minsyn   \gtl@minsynfalse
+\newif\ifgtl@tipa     \gtl@tipafalse
+\newif\ifgtl@glosses  \gtl@glossestrue
+\newif\ifgtl@greek    \gtl@greektrue
+\newif\ifgtl@beamer
+\@ifclassloaded{beamer}{\gtl@beamertrue}{\gtl@beamerfalse}
+
+\ExplSyntaxOn
+\keys_define:nn { gtling }
+  {
+    examples .choices:nn = { linguex, expex, gb4e, none }
+      { \tl_gset:Ne \gtl@examples { \l_keys_choice_tl } },
+    examples .initial:n  = linguex,
+    trees    .choices:nn = { forest, none }
+      { \tl_gset:Ne \gtl@trees { \l_keys_choice_tl } },
+    trees    .initial:n  = forest,
+    minsyn   .code:n     = { \use:c { gtl@minsyn #1 } },
+    minsyn   .default:n  = true,
+    bib      .choices:nn = { natbib, biblatex, none }
+      { \tl_gset:Ne \gtl@bib { \l_keys_choice_tl } },
+    bib      .initial:n  = natbib,
+    bibstyle .tl_gset:N  = \gtl@bibstyle,
+    bibfile  .clist_gset:N = \gtl@bibfiles,
+    bibfile  .initial:n  = fbib,
+    notes    .choices:nn = { show, hide }
+      { \use:c { gtl@notes \int_compare:nNnTF { \l_keys_choice_int } = 1 { true } { false } } },
+    final    .code:n     = { \gtl@notesfalse },
+    final    .value_forbidden:n = true,
+    semindex .tl_gset:N  = \gtl@semindex,
+    tipa     .code:n     = { \use:c { gtl@tipa #1 } },
+    tipa     .default:n  = true,
+    glosses  .code:n     = { \use:c { gtl@glosses #1 } },
+    glosses  .default:n  = true,
+    lang     .tl_gset:N  = \gtl@lang,
+    lang     .initial:n  = british,
+    greek    .code:n     = { \use:c { gtl@greek #1 } },
+    greek    .default:n  = true,
+  }
+\ExplSyntaxOff
+\ProcessKeyOptions[gtling]
+
+\ifdefined\directlua\else
+  \PackageWarningNoLine{gtling}{gtling is designed for LuaLaTeX.\MessageBreak
+    Compile with lualatex (latexmk -lualatex)}
+\fi
+
+% Define a user command only if the name is free; otherwise keep the
+% existing definition and say so in the log.  Keeps gtling usable next
+% to packages or old preambles that already claim a name.
+\ExplSyntaxOn
+\cs_new_protected:Npn \gtl@new #1
+  {
+    \cs_if_free:NTF #1
+      { \newcommand #1 }
+      {
+        \PackageInfo { gtling } { \token_to_str:N #1 ~ already ~ defined;
+          ~ keeping ~ it }
+        \gtl@gobbledef
+      }
+  }
+\ExplSyntaxOff
+\def\gtl@gobbledef#1#{\@gobble}
+
+% -----------------------------------------------------------------------
+% Colours: gt* names.  gtarticle/gtbook define them per mode
+% (light/cream/dark); under beamer they follow the colblanc palette when
+% that theme is loaded.  \providecolor keeps any existing definition.
+% -----------------------------------------------------------------------
+\RequirePackage{xcolor}
+\ifgtl@beamer
+  \@ifpackageloaded{beamerthemecolblanc}{%
+    \colorlet{gtbg}{colblancbg}
+    \colorlet{gttext}{colblanctext}
+    \colorlet{gtaccent}{colblancaccent}
+    \colorlet{gtalert}{colblancalert}
+    \colorlet{gtghost}{colblancghost}
+    \colorlet{gtexbg}{colblancexbg}
+    \colorlet{gtlink}{colblanclinkcolour}
+  }{}
+\fi
+\providecolor{gtbg}{HTML}{FFFFFF}
+\providecolor{gttext}{HTML}{000000}
+\providecolor{gtaccent}{HTML}{C0322A}
+\providecolor{gtalert}{HTML}{C0322A}
+\providecolor{gtghost}{HTML}{8C8577}
+\providecolor{gtexbg}{HTML}{EFEAE0}
+\providecolor{gtlink}{HTML}{8B1E17}
+\providecolor{gtnotebg}{HTML}{FFF8E6}
+\providecolor{gtnoteframe}{HTML}{A6561C}
+
+% -----------------------------------------------------------------------
+% Core packages
+% -----------------------------------------------------------------------
+\RequirePackage{amsmath}
+\RequirePackage{mathtools}
+\@ifpackageloaded{unicode-math}{}{\RequirePackage{amssymb}\RequirePackage{stmaryrd}}
+\RequirePackage{graphicx}
+\RequirePackage{xspace}
+\RequirePackage{booktabs}
+\RequirePackage{array}
+\RequirePackage{multirow}
+\RequirePackage{tabularx}
+\RequirePackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,decorations.pathreplacing}
+\ifgtl@beamer\else
+  \RequirePackage{enumitem}
+  \RequirePackage{microtype}
+\fi
+\ifgtl@tipa \RequirePackage{tipa}\fi
+
+% Language
+\def\gtl@none{none}
+\ifx\gtl@lang\gtl@none\else
+  \@ifpackageloaded{polyglossia}{}{%
+    \@ifpackageloaded{babel}{}{%
+      \ifgtl@greek
+        \RequirePackage[greek,main=\gtl@lang]{babel}%
+      \else
+        \RequirePackage[main=\gtl@lang]{babel}%
+      \fi}}
+\fi
+\RequirePackage{csquotes}
+
+% Table column types: L{2cm} R{2cm} C{2cm}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+
+% -----------------------------------------------------------------------
+% Numbered examples
+% -----------------------------------------------------------------------
+\def\gtl@tmp{linguex}\ifx\gtl@examples\gtl@tmp
+  \RequirePackage{linguex}
+  \renewcommand{\firstrefdash}{}          % (1a), not (1-a)
+  \AtBeginDocument{%
+    \setlength{\Extopsep}{0.6em}%
+    \setlength{\Exlabelsep}{0.8em}%
+    \setlength{\SubExleftmargin}{1.6em}}
+\fi
+\def\gtl@tmp{expex}\ifx\gtl@examples\gtl@tmp \RequirePackage{expex}\fi
+\def\gtl@tmp{gb4e}\ifx\gtl@examples\gtl@tmp
+  \RequirePackage{gb4e}\noautomath
+\fi
+
+% \exlang{Greek}: language label at the right edge of an example's first line
+\gtl@new\exlang[1]{\hfill\raisebox{1.95\baselineskip}[0pt][0pt]{#1}}
+
+% -----------------------------------------------------------------------
+% Trees
+% -----------------------------------------------------------------------
+% minsyn under colblanc: colour scheme follows the theme mode.  Kept in a
+% macro: \ifcolblanc@dark is undefined elsewhere and would unbalance
+% \if...\fi nesting inside a skipped conditional branch.
+\newcommand\gtl@loadminsyn{%
+  \@ifundefined{ifcolblanc@dark}{\RequirePackage{minsyn}}{%
+    \csname ifcolblanc@dark\endcsname
+      \RequirePackage[scheme=accessible]{minsyn}%
+    \else
+      \RequirePackage[scheme=default]{minsyn}%
+      \colorlet{minsyn@wsbg}{gtexbg}%
+    \fi
+    \colorlet{minsyn@wsfr}{gtaccent}}}
+\ifgtl@minsyn
+  \gtl@loadminsyn
+\else
+  \def\gtl@tmp{forest}\ifx\gtl@trees\gtl@tmp
+    \RequirePackage[linguistics]{forest}
+  \fi
+\fi
+\ifgtl@beamer
+  \@ifpackageloaded{forest}{%
+    \forestset{
+      default preamble={
+        for tree={font=\rmfamily\small, inner sep=2pt, s sep=1.6em,
+          l sep=1.8em, edge={gtaccent!50, line width=0.5pt}, draw=none}},
+      bracket/.style={for tree={no edge, inner sep=1pt, l=0pt}}}}{}
+\fi
+
+% -----------------------------------------------------------------------
+% Bibliography
+%   \printbib            print the reference list (natbib or biblatex)
+%   \citeposs{key}       Chomsky's (1995)
+% -----------------------------------------------------------------------
+\def\gtl@tmp{natbib}\ifx\gtl@bib\gtl@tmp
+  \RequirePackage{natbib}
+  \ifx\gtl@bibstyle\@empty \def\gtl@bibstyle{chicago}\fi
+  \AtBeginDocument{\bibliographystyle{\gtl@bibstyle}}
+  \newcommand\printbib{\bibliography{\gtl@bibfiles}}
+\fi
+\def\gtl@tmp{biblatex}\ifx\gtl@bib\gtl@tmp
+  \ifx\gtl@bibstyle\@empty \def\gtl@bibstyle{authoryear}\fi
+  \def\gtl@tmp{unified}%
+  \ifx\gtl@bibstyle\gtl@tmp
+    \IfFileExists{unified.bbx}{}{%
+      \PackageWarningNoLine{gtling}{biblatex-unified not installed;\MessageBreak
+        using authoryear (tlmgr install biblatex-unified)}%
+      \def\gtl@bibstyle{authoryear}}%
+  \fi
+  \RequirePackage[backend=biber, style=\gtl@bibstyle, natbib=true,
+    maxcitenames=2, maxbibnames=99, uniquelist=false,
+    url=false, doi=false, isbn=false, eprint=false]{biblatex}
+  \@for\gtl@f:=\gtl@bibfiles\do{\addbibresource{\gtl@f.bib}}
+  \newcommand\printbib{\printbibliography}
+\fi
+\def\gtl@tmp{none}\ifx\gtl@bib\gtl@tmp
+  \newcommand\printbib{}
+\fi
+\gtl@new\citeposs[1]{\citeauthor{#1}'s (\citeyear{#1})}
+
+% -----------------------------------------------------------------------
+% Semantics
+%   \sem{x}  [[x]]      \sem[M,g]{x}  [[x]]^{M,g}     \dbr{x} = \sem[]{x}
+%   \tuple{x} <x> (auto-sized)   \oset{x} <x>   \setof{x} {x} (auto-sized)
+%   \set{x} {x}   \card{x} |x|   \type{e,t} <e,t>   P\tsub{e,t}   \lam{x}
+% -----------------------------------------------------------------------
+\providecommand\gtl@semindex{}
+\@ifpackageloaded{unicode-math}
+  {\def\gtl@lb{\lBrack}\def\gtl@rb{\rBrack}}
+  {\def\gtl@lb{\llbracket}\def\gtl@rb{\rrbracket}}
+\newcommand\gtl@sem[2]{%
+  \begingroup\protected@edef\gtl@tmp{#1}%
+  \ifx\gtl@tmp\@empty
+    \ensuremath{\gtl@lb #2\gtl@rb}%
+  \else
+    \ensuremath{\gtl@lb #2\gtl@rb^{\gtl@tmp}}%
+  \fi\endgroup}
+\ifdefined\sem
+  \PackageInfo{gtling}{\string\sem\space already defined; keeping it}
+\else
+  \NewDocumentCommand\sem{o m}{%
+    \IfNoValueTF{#1}{\gtl@sem{\gtl@semindex}{#2}}{\gtl@sem{#1}{#2}}}
+\fi
+\gtl@new\dbr[1]{\gtl@sem{}{#1}}
+\gtl@new\tuple[1]{\ensuremath{\left\langle #1\right\rangle}}
+\gtl@new\oset[1]{\ensuremath{\langle #1\rangle}}
+\gtl@new\setof[1]{\ensuremath{\left\{ #1\right\}}}
+\gtl@new\set[1]{\ensuremath{\{#1\}}}
+\gtl@new\card[1]{\ensuremath{\lvert #1\rvert}}
+\gtl@new\type[1]{\ensuremath{\langle #1\rangle}}
+\gtl@new\tsub[1]{\ensuremath{_{\langle #1\rangle}}}
+\gtl@new\lam[1]{\ensuremath{\lambda #1.\,}}
+\gtl@new\ve{\ensuremath{\wedge}}
+\gtl@new\Dox{\ensuremath{\mathrm{Dox}}}
+
+% -----------------------------------------------------------------------
+% Object language, glosses and syntax
+% -----------------------------------------------------------------------
+\gtl@new\lx[1]{\textit{#1}}                        % object-language form
+\gtl@new\transl[1]{`#1'}                           % translation
+\gtl@new\gl[1]{\textsc{\MakeLowercase{#1}}}        % \gl{nom.pl}
+\gtl@new\xbar[1]{\ensuremath{\overline{\mbox{#1}}}}% \xbar{T}  T-bar
+\gtl@new\trc[1]{\ensuremath{\langle}#1\ensuremath{\rangle}}  % <copy>
+\gtl@new\agree{A\textsc{gree}\xspace}
+\gtl@new\chl{C\textsubscript{HL}\xspace}
+
+\ifgtl@glosses
+  \def\gtl@gloss#1#2{\expandafter\gtl@new\csname#1\endcsname{\gl{#2}\xspace}}
+  \gtl@gloss{nom}{nom}   \gtl@gloss{acc}{acc}   \gtl@gloss{gen}{gen}
+  \gtl@gloss{dat}{dat}   \gtl@gloss{voc}{voc}
+  \gtl@gloss{sg}{sg}     \gtl@gloss{pl}{pl}     \gtl@gloss{du}{du}
+  \gtl@gloss{masc}{m}    \gtl@gloss{fem}{f}     \gtl@gloss{neut}{n}
+  \gtl@gloss{past}{pst}  \gtl@gloss{pres}{prs}  \gtl@gloss{fut}{fut}
+  \gtl@gloss{pfv}{pfv}   \gtl@gloss{ipfv}{ipfv} \gtl@gloss{prf}{prf}
+  \gtl@gloss{subj}{sbjv} \gtl@gloss{ind}{ind}   \gtl@gloss{imp}{imp}
+  \gtl@gloss{cl}{cl}     \gtl@gloss{comp}{comp} \gtl@gloss{foc}{foc}
+  \gtl@gloss{tpc}{top}   \gtl@gloss{NEG}{neg}   \gtl@gloss{DEF}{def}
+  \gtl@gloss{indf}{indf} \gtl@gloss{refl}{refl} \gtl@gloss{pass}{pass}
+  \gtl@gloss{agr}{agr}   \gtl@gloss{Q}{q}
+\fi
+
+% -----------------------------------------------------------------------
+% Judgements (coloured under colblanc, plain in print)
+% -----------------------------------------------------------------------
+% Text-mode check mark from Latin Modern Math (Libertinus lacks U+2713)
+\@ifpackageloaded{fontspec}
+  {\newfontfamily\gtl@symbolfont{Latin Modern Math}[Scale=MatchLowercase]
+   \def\gtl@check{{\gtl@symbolfont\char"2713}}}
+  {\def\gtl@check{\ensuremath{\checkmark}}}
+\gtl@new\jok{\leavevmode{\color{gtaccent}\gtl@check}}
+\gtl@new\jbad{\leavevmode{\color{gtalert}*}}
+\gtl@new\jbadd{\leavevmode{\color{gtalert}**}}
+\gtl@new\jquest{\leavevmode{\color{gtaccent!60}?}}
+\gtl@new\jqquest{\leavevmode{\color{gtaccent!40}??}}
+\gtl@new\ok{\jok}
+\gtl@new\verybad{\jbadd}
+\gtl@new\marginal{\jquest}
+
+% Colour helpers (all formats)
+\gtl@new\hl[1]{\leavevmode{\color{gtaccent}\textbf{#1}}}
+\gtl@new\good[1]{\leavevmode{\color{gtaccent!80}#1}}
+\gtl@new\bad[1]{\leavevmode{\color{gtalert}#1}}
+\gtl@new\ghost[1]{\leavevmode{\color{gtghost}#1}}
+\ifgtl@beamer
+  \gtl@new\term[1]{\alert{\textbf{#1}}}
+\else
+  \gtl@new\term[1]{\textbf{#1}}
+\fi
+\gtl@new\terminology[1]{\term{#1}}
+
+% -----------------------------------------------------------------------
+% Layout helpers
+% -----------------------------------------------------------------------
+\gtl@new\BF[1]{\textbf{#1:}\hspace{1em}\ignorespaces}
+\gtl@new\tab{\makebox[2em]{}}
+\gtl@new\ignore[1]{}
+\providecommand\gtanon[1]{#1}   % redefined by the classes' anonymous option
+
+% -----------------------------------------------------------------------
+% Revision markup -- notes=show (default) | notes=hide (or `final')
+%   \correct{..}  margin bar note       \change{..}  bold when shown
+%   \note{..}     [bold inline note]    \gtnote[who]{..}  numbered query box
+%   \str{..}      strike-through        \todo{..}  todonotes (not in beamer)
+% -----------------------------------------------------------------------
+\gtl@new\str[1]{{\setbox1=\hbox{#1}\leavevmode
+  \raise.45ex\rlap{\leaders\hrule\hskip\wd1}\box1}}
+\RequirePackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\newcounter{gtnote}
+\ifgtl@notes
+  \ifgtl@beamer   % no margins on slides: inline
+    \gtl@new\correct[1]{\leavevmode{\footnotesize\color{gtalert}[#1]}}
+  \else
+    \gtl@new\correct[1]{\marginpar{\footnotesize\color{gtaccent}%
+      \begin{tabular}[t]{@{}|p{0.85\marginparwidth}@{}}\raggedright#1\end{tabular}}}
+  \fi
+  \gtl@new\change[1]{\textbf{#1}}
+  \ifgtl@beamer\else\gtl@new\note[1]{\textbf{[#1]}}\fi
+  \NewDocumentCommand\gtnote{O{} +m}{%
+    \refstepcounter{gtnote}%
+    \begin{tcolorbox}[breakable, enhanced, colback=gtnotebg,
+      colframe=gtnoteframe, coltext=gttext, coltitle=white, boxrule=0.6pt,
+      left=5pt, right=5pt, top=3pt, bottom=3pt,
+      title={\footnotesize\bfseries Q\thegtnote
+        \if\relax\detokenize{#1}\relax\else\ \normalfont\itshape #1\fi}]
+    \small #2
+    \end{tcolorbox}}
+  \ifgtl@beamer\else\RequirePackage{todonotes}\fi
+\else
+  \gtl@new\correct[1]{}
+  \gtl@new\change[1]{#1}
+  \ifgtl@beamer\else\gtl@new\note[1]{}\fi
+  \NewDocumentCommand\gtnote{O{} +m}{}
+  \ifgtl@beamer\else\RequirePackage[disable]{todonotes}\fi
+\fi
+
+% -----------------------------------------------------------------------
+% Beamer only (from colblanc-preamble)
+% -----------------------------------------------------------------------
+\ifgtl@beamer
+  % \revealfrom{N}{text}: ghosted before overlay N, full from N on
+  % \revealon{N}{text}:   full only on overlay N
+  \newcommand{\revealfrom}[2]{\temporal<#1>{\ghost{#2}}{#2}{#2}}
+  \newcommand{\revealon}[2]{\temporal<#1>{\ghost{#2}}{#2}{\ghost{#2}}}
+  % \chain{head}{lower copy}
+  \newcommand{\chain}[2]{#1\ldots\colorbox{gtexbg}{\textcolor{gtghost}{#2}}}
+  % Unnumbered example block
+  \newenvironment{exblock}
+    {\begin{beamercolorbox}[sep=0.6em, wd=\linewidth]{block body example}%
+     \small\rmfamily}
+    {\end{beamercolorbox}}
+  % \begin{twocol}{0.45} left \midcol right \end{twocol}
+  \newlength{\gtl@leftwd}\newlength{\gtl@rightwd}
+  \newenvironment{twocol}[1]{%
+    \setlength{\gtl@leftwd}{#1\textwidth}%
+    \setlength{\gtl@rightwd}{0.96\textwidth}%
+    \addtolength{\gtl@rightwd}{-\gtl@leftwd}%
+    \begin{columns}[T]\begin{column}{\gtl@leftwd}}
+   {\end{column}\end{columns}}
+  \newcommand{\midcol}{\end{column}\begin{column}{\gtl@rightwd}}
+\fi
+
+\endinput

@@ -1,0 +1,286 @@
+%% gtclass.code.tex -- shared option handling and page setup for
+%% gtarticle.cls and gtbook.cls.  Not for direct use.
+%%
+%% The class sets \gt@baseclass and \gt@classdefaults, then:
+%%   \input{gtclass.code.tex}
+%%   \ProcessKeyOptions[gtclass]
+%%   \gt@loadbase          % loads the KOMA class
+%%   \gt@setup             % fonts, layout, colours, gtling, hyperref
+%%
+%% Copyright (C) 2026 George Tsoulas. LPPL 1.3c or later.
+
+\newif\ifgt@linenumbers \gt@linenumbersfalse
+\newif\ifgt@anon        \gt@anonfalse
+\newif\ifgt@stamp       \gt@stampfalse
+\newif\ifgt@handout     \gt@handoutfalse
+\newif\ifgt@hyperref    \gt@hyperreftrue
+\newif\ifgt@colorlinks  \gt@colorlinkstrue
+\newif\ifgt@sidenotes   \gt@sidenotestrue
+
+\ExplSyntaxOn
+\clist_new:N \g__gt_pass_clist
+
+% Forward a key unchanged to gtling.sty
+\cs_new_protected:Npn \__gt_forward:n #1
+  {
+    \keys_define:nn { gtclass }
+      { #1 .code:n = { \PassOptionsToPackage { #1 = {##1} } { gtling } } }
+  }
+\clist_map_function:nN
+  { examples, trees, minsyn, bib, bibstyle, bibfile, notes,
+    semindex, tipa, glosses, lang, greek }
+  \__gt_forward:n
+
+\keys_define:nn { gtclass }
+  {
+    final .code:n = { \PassOptionsToPackage { final } { gtling } },
+    final .value_forbidden:n = true,
+
+    paper   .code:n  =
+      { \clist_gput_right:Nn \g__gt_pass_clist { paper = #1 } },
+
+    margins .tl_gset:N = \gt@margins,
+    margins .initial:n = normal,
+
+    layout  .choices:nn = { standard, tufte }
+      { \tl_gset:Ne \gt@layout { \l_keys_choice_tl } },
+    layout  .initial:n = standard,
+    sidenotes .code:n  = { \use:c { gt@sidenotes #1 } },
+    sidenotes .default:n = true,
+
+    mode    .choices:nn = { light, cream, dark }
+      { \tl_gset:Ne \gt@mode { \l_keys_choice_tl } },
+    mode    .initial:n = light,
+    dark    .meta:n    = { mode = dark },
+    dark    .value_forbidden:n = true,
+    cream   .meta:n    = { mode = cream },
+    cream   .value_forbidden:n = true,
+
+    spacing .choices:nn = { single, onehalf, double }
+      { \tl_gset:Ne \gt@spacing { \l_keys_choice_tl } },
+    spacing .initial:n = single,
+
+    font     .tl_gset:N = \gt@font,
+    font     .initial:n = libertinus,
+    sansfont .tl_gset:N = \gt@sansfont,
+    monofont .tl_gset:N = \gt@monofont,
+    mathfont .tl_gset:N = \gt@mathfont,
+    headfont .choices:nn = { serif, sans }
+      { \tl_gset:Ne \gt@headfont { \l_keys_choice_tl } },
+    headfont .initial:n = serif,
+
+    linenumbers .code:n = { \use:c { gt@linenumbers #1 } },
+    linenumbers .default:n = true,
+    anonymous   .code:n = { \use:c { gt@anon #1 } },
+    anonymous   .default:n = true,
+    stamp       .code:n = { \use:c { gt@stamp #1 } },
+    stamp       .default:n = true,
+    handout     .code:n = { \use:c { gt@handout #1 } },
+    handout     .default:n = true,
+    hyperref    .code:n = { \use:c { gt@hyperref #1 } },
+    hyperref    .default:n = true,
+    colorlinks  .code:n = { \use:c { gt@colorlinks #1 } },
+    colorlinks  .default:n = true,
+
+    % Anything else goes to the KOMA base class (fontsize=12pt, DIV=12,
+    % BCOR=8mm, open=any, parskip=half, twoside, 12pt, draft, ...)
+    unknown .code:n =
+      {
+        \tl_if_blank:nTF {#1}
+          { \clist_gput_right:Ne \g__gt_pass_clist { \l_keys_key_str } }
+          { \clist_gput_right:Ne \g__gt_pass_clist { \l_keys_key_str = \exp_not:n {#1} } }
+      },
+  }
+
+\cs_new_protected:Npn \gt@loadbase
+  {
+    % Hide our own keys from packages that read global class options
+    % (geometry has `layout', caption has `font', ...).
+    \clist_gset_eq:NN \@classoptionslist \g__gt_pass_clist
+    \exp_args:Ne \PassOptionsToClass
+      { \gt@classdefaults , \clist_use:Nn \g__gt_pass_clist { , } }
+      { \gt@baseclass }
+    \LoadClass { \gt@baseclass }
+  }
+\ExplSyntaxOff
+
+\newcommand\gt@setup{%
+  \gt@setupfonts
+  \gt@setupcolours
+  \gt@setuplayout
+  \gt@setupspacing
+  \gt@setuptitle
+  \RequirePackage{gtling}%
+  \gt@setupextras
+}
+
+% -----------------------------------------------------------------------
+% Fonts (LuaLaTeX, fontspec + unicode-math)
+%   font = libertinus | pagella | termes | garamond | didot | lm | <family>
+% -----------------------------------------------------------------------
+\newcommand\gt@fontset[4]{% main, sans, mono, math
+  \def\gt@f@main{#1}\def\gt@f@sans{#2}\def\gt@f@mono{#3}\def\gt@f@math{#4}}
+\newcommand\gt@setupfonts{%
+  % ams packages must precede unicode-math
+  \RequirePackage{amsmath}%
+  \RequirePackage{amssymb}%
+  \RequirePackage{mathtools}%
+  \RequirePackage{fontspec}%
+  \RequirePackage{unicode-math}%
+  \def\gt@tmp{libertinus}\ifx\gt@font\gt@tmp
+    \gt@fontset{Libertinus Serif}{Libertinus Sans}{Libertinus Mono}{Libertinus Math}%
+  \else\def\gt@tmp{pagella}\ifx\gt@font\gt@tmp
+    \gt@fontset{TeX Gyre Pagella}{TeX Gyre Heros}{Latin Modern Mono}{TeX Gyre Pagella Math}%
+  \else\def\gt@tmp{termes}\ifx\gt@font\gt@tmp
+    \gt@fontset{TeX Gyre Termes}{TeX Gyre Heros}{Latin Modern Mono}{TeX Gyre Termes Math}%
+  \else\def\gt@tmp{garamond}\ifx\gt@font\gt@tmp
+    \gt@fontset{EB Garamond}{Libertinus Sans}{Latin Modern Mono}{Garamond-Math}%
+  \else\def\gt@tmp{didot}\ifx\gt@font\gt@tmp
+    \gt@fontset{GFS Didot}{TeX Gyre Heros}{Latin Modern Mono}{TeX Gyre Pagella Math}%
+  \else\def\gt@tmp{lm}\ifx\gt@font\gt@tmp
+    \gt@fontset{Latin Modern Roman}{Latin Modern Sans}{Latin Modern Mono}{Latin Modern Math}%
+  \else
+    \gt@fontset{\gt@font}{Libertinus Sans}{Latin Modern Mono}{Libertinus Math}%
+  \fi\fi\fi\fi\fi\fi
+  \ifx\gt@sansfont\@empty\else\let\gt@f@sans\gt@sansfont\fi
+  \ifx\gt@monofont\@empty\else\let\gt@f@mono\gt@monofont\fi
+  \ifx\gt@mathfont\@empty\else\let\gt@f@math\gt@mathfont\fi
+  \setmainfont{\gt@f@main}%
+  \setsansfont{\gt@f@sans}[Scale=MatchLowercase]%
+  \setmonofont{\gt@f@mono}[Scale=MatchLowercase]%
+  \setmathfont{\gt@f@math}%
+}
+\providecommand\gt@sansfont{}
+\providecommand\gt@monofont{}
+\providecommand\gt@mathfont{}
+
+% -----------------------------------------------------------------------
+% Colours -- mode = light | cream | dark  (cream/dark = colblanc palette)
+% -----------------------------------------------------------------------
+\newcommand\gt@setupcolours{%
+  \RequirePackage{xcolor}%
+  \def\gt@tmp{dark}\ifx\gt@mode\gt@tmp
+    \definecolor{gtbg}{HTML}{1C1815}\definecolor{gttext}{HTML}{F0E9DA}%
+    \definecolor{gtaccent}{HTML}{D85A4A}\definecolor{gtalert}{HTML}{D85A4A}%
+    \definecolor{gtghost}{HTML}{8A7D6E}\definecolor{gtexbg}{HTML}{262019}%
+    \definecolor{gtlink}{HTML}{E8836F}%
+    \definecolor{gtnotebg}{HTML}{2E2820}\definecolor{gtnoteframe}{HTML}{D85A4A}%
+  \else\def\gt@tmp{cream}\ifx\gt@mode\gt@tmp
+    \definecolor{gtbg}{HTML}{F4EEE0}\definecolor{gttext}{HTML}{1C1B18}%
+    \definecolor{gtaccent}{HTML}{C0322A}\definecolor{gtalert}{HTML}{C0322A}%
+    \definecolor{gtghost}{HTML}{8C8577}\definecolor{gtexbg}{HTML}{EBE3D0}%
+    \definecolor{gtlink}{HTML}{8B1E17}%
+  \else
+    \definecolor{gtbg}{HTML}{FFFFFF}\definecolor{gttext}{HTML}{000000}%
+    \definecolor{gtaccent}{HTML}{C0322A}\definecolor{gtalert}{HTML}{C0322A}%
+    \definecolor{gtghost}{HTML}{8C8577}\definecolor{gtexbg}{HTML}{F2EFE9}%
+    \definecolor{gtlink}{HTML}{8B1E17}%
+  \fi\fi
+  \def\gt@tmp{light}\ifx\gt@mode\gt@tmp\else
+    \AtBeginDocument{\pagecolor{gtbg}\color{gttext}}%
+  \fi
+}
+
+% -----------------------------------------------------------------------
+% Page layout
+%   margins = normal (KOMA type area) | tight | narrow | wide | <length>
+%   layout  = standard | tufte (wide outer margin, sidenotes)
+% -----------------------------------------------------------------------
+\newcommand\gt@margin@set[1]{%
+  \RequirePackage{geometry}%
+  \geometry{margin=#1, marginparsep=3mm,
+    marginparwidth=\dimexpr#1-6mm\relax}}
+\newcommand\gt@setuplayout{%
+  \ifgt@handout
+    \def\gt@tmp{normal}\ifx\gt@margins\gt@tmp\def\gt@margins{narrow}\fi
+  \fi
+  \def\gt@tmp{tufte}\ifx\gt@layout\gt@tmp
+    \RequirePackage{geometry}%
+    \geometry{left=0.115\paperwidth, textwidth=0.53\paperwidth,
+      marginparsep=0.035\paperwidth, marginparwidth=0.24\paperwidth,
+      top=0.09\paperheight, bottom=0.11\paperheight,
+      headsep=1.5em, footskip=2.5em}%
+    \ifgt@sidenotes
+      \RequirePackage{sidenotes}%
+      \RenewDocumentCommand\footnote{o m}{%
+        \IfNoValueTF{##1}{\sidenote{##2}}{\sidenote[##1]{##2}}}%
+    \else
+      \RequirePackage{marginnote}%
+    \fi
+  \else
+    \def\gt@tmp{normal}\ifx\gt@margins\gt@tmp
+    \else\def\gt@tmp{tight}\ifx\gt@margins\gt@tmp \gt@margin@set{15mm}%
+    \else\def\gt@tmp{narrow}\ifx\gt@margins\gt@tmp \gt@margin@set{20mm}%
+    \else\def\gt@tmp{wide}\ifx\gt@margins\gt@tmp \gt@margin@set{35mm}%
+    \else \gt@margin@set{\gt@margins}%
+    \fi\fi\fi\fi
+  \fi
+  % Headings: serif by default (KOMA's default is sans)
+  \def\gt@tmp{serif}\ifx\gt@headfont\gt@tmp
+    \addtokomafont{disposition}{\rmfamily}%
+  \fi
+  \addtokomafont{disposition}{\color{gttext}}%
+  \RequirePackage{scrlayer-scrpage}%
+  \def\gt@tmp{tufte}\ifx\gt@layout\gt@tmp
+    \KOMAoptions{headwidth=textwithmarginpar, footwidth=textwithmarginpar}%
+  \fi
+  \ifgt@linenumbers
+    \RequirePackage[switch]{lineno}%
+    \AtBeginDocument{\linenumbers}%
+  \fi
+}
+
+% -----------------------------------------------------------------------
+% Line spacing
+% -----------------------------------------------------------------------
+\newcommand\gt@setupspacing{%
+  \RequirePackage{setspace}%
+  \def\gt@tmp{onehalf}\ifx\gt@spacing\gt@tmp\onehalfspacing\fi
+  \def\gt@tmp{double}\ifx\gt@spacing\gt@tmp\doublespacing\fi
+}
+
+% -----------------------------------------------------------------------
+% Title, anonymity, draft stamp
+% -----------------------------------------------------------------------
+\newcommand\gt@setuptitle{%
+  \ifgt@anon
+    \AtBeginDocument{%
+      \author{Anonymous}\date{}%
+      \renewcommand\thanks[1]{}}%
+    \renewcommand\gtanon[1]{[\textit{anonymised}]}%
+  \fi
+  \ifgt@handout
+    \renewcommand\maketitle{\par
+      \begin{center}
+        {\Large\bfseries\@title\par}\vspace{0.4em}%
+        {\@author\ifx\@date\@empty\else\quad\textperiodcentered\quad\@date\fi\par}%
+      \end{center}\vspace{-0.4em}%
+      {\color{gtaccent}\rule{\linewidth}{0.6pt}}\par\vspace{1.2em}}%
+  \fi
+  \ifgt@stamp
+    \ifoot*{\scriptsize\color{gtghost}\gt@stamptext}%
+  \fi
+}
+\providecommand\gtanon[1]{#1}
+\newcommand\gt@twodigits[1]{\ifnum#1<10 0\fi\number#1}
+\newcommand\gt@stamptext{Draft \textperiodcentered\ \jobname.tex
+  \textperiodcentered\ compiled \today, \gt@twodigits{\numexpr\time/60\relax}:%
+  \gt@twodigits{\numexpr\time-(\time/60)*60\relax}}
+
+% -----------------------------------------------------------------------
+% Late setup: hyperref + cleveref at the end of the preamble so they
+% come after the user's own packages.
+% -----------------------------------------------------------------------
+\newcommand\gt@setupextras{%
+  \ifgt@hyperref
+    \AddToHook{begindocument/before}[gtclass]{%
+      \@ifpackageloaded{hyperref}{}{\RequirePackage{hyperref}}%
+      \ifgt@colorlinks\hypersetup{colorlinks=true}\else\hypersetup{hidelinks}\fi
+      \hypersetup{linkcolor=gtlink, citecolor=gtlink, urlcolor=gtlink,
+        filecolor=gtlink, pdfcreator={LuaLaTeX + gtling},
+        bookmarksnumbered=true}%
+      \ifgt@anon\hypersetup{pdfauthor={}}\fi
+      \@ifpackageloaded{cleveref}{}{\RequirePackage[capitalise,noabbrev]{cleveref}}%
+    }%
+  \fi
+}

@@ -1,0 +1,829 @@
+%%======================================================================
+%%  minsyn.sty  --  Minimalist Syntax Workspace Derivations
+%%  v1.3  (2025-03-05)
+%%
+%%  Provides macros and environments for typesetting workspace-based
+%%  syntactic derivations in the tradition of Chomsky (2019???2024)
+%%  and related minimalist work.
+%%
+%%  Features:
+%%    * Framed, auto-numbered workspace boxes  (tcolorbox)
+%%    * Set-theoretic SO notation  {??, ??},  {???L??? : {??, ??}}
+%%    * Colour-coded operation badges: Select / Merge / iMerge / LA / Transfer
+%%    * Forest tree display with dedicated styles
+%%    * derivation environment for vertical step sequences
+%%    * Five built-in colour schemes; fully customisable
+%%    * Pair-Merge / adjunction: 3D perspective plane display
+%%    * Self-Merge (SM1/SM2/SM3) and Box Theory (Tsoulas-style)
+%%
+%%  Options:
+%%    scheme=default    steel-blue / green / red / purple  (factory default)
+%%    scheme=grayscale  black-and-white; badges use [ ] brackets
+%%    scheme=ocean      teal / cyan palette
+%%    scheme=sepia      warm brown / amber palette
+%%    scheme=accessible deuteranopia-safe blue / orange / teal palette
+%%
+%%    nocolor    legacy alias for scheme=grayscale
+%%    notrees    do not load the forest package
+%%
+%%  Usage:
+%%    \usepackage{minsyn}
+%%    \usepackage[scheme=ocean]{minsyn}
+%%    \usepackage[scheme=grayscale]{minsyn}
+%%    \usepackage[nocolor]{minsyn}          % same as scheme=grayscale
+%%    \usepackage[notrees]{minsyn}
+%%======================================================================
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{minsyn}[2025/02/24 v1.1 Minimalist Syntax Workspace Derivations]
+
+%%----------------------------------------------------------------------
+%% 0.  Package options
+%%----------------------------------------------------------------------
+\newif\ifminsyn@color  \minsyn@colortrue
+\newif\ifminsyn@trees  \minsyn@treestrue
+
+%% Internal token to hold the chosen scheme name (default: "default")
+\def\minsyn@scheme{default}
+
+\DeclareOption{nocolor}{\minsyn@colorfalse\def\minsyn@scheme{grayscale}}
+\DeclareOption{notrees}{\minsyn@treesfalse}
+%% scheme=<name> key-value option
+\DeclareOption{scheme=default}  {\minsyn@colortrue \def\minsyn@scheme{default}}
+\DeclareOption{scheme=grayscale}{\minsyn@colorfalse\def\minsyn@scheme{grayscale}}
+\DeclareOption{scheme=ocean}    {\minsyn@colortrue \def\minsyn@scheme{ocean}}
+\DeclareOption{scheme=sepia}    {\minsyn@colortrue \def\minsyn@scheme{sepia}}
+\DeclareOption{scheme=accessible}{\minsyn@colortrue\def\minsyn@scheme{accessible}}
+\ProcessOptions\relax
+
+%%----------------------------------------------------------------------
+%% 1.  Dependencies
+%%----------------------------------------------------------------------
+\RequirePackage{xcolor}
+\RequirePackage{tcolorbox}
+  \tcbuselibrary{skins, breakable}
+\RequirePackage{amsmath, amssymb}
+\RequirePackage{xparse}
+\RequirePackage{etoolbox}          % \ifstrempty
+\RequirePackage{cancel}            % \bcancel for transferred SOs
+
+\ifminsyn@trees
+  \RequirePackage[linguistics]{forest}
+  \usetikzlibrary{calc}
+  \pgfdeclarelayer{minsyn@background}
+  \pgfsetlayers{minsyn@background,main}
+\fi
+
+%%----------------------------------------------------------------------
+%% 2.  Colour palette -- scheme dispatch
+%%
+%%  Seven semantic colour roles are defined:
+%%    minsyn@wsbg  workspace background fill
+%%    minsyn@wsfr  workspace frame / title bar / divider rule
+%%    minsyn@sel   Select badge
+%%    minsyn@em    External Merge badge
+%%    minsyn@im    Internal Merge badge
+%%    minsyn@la    Label (LA) badge
+%%    minsyn@tr    Transfer badge + SOtrace / Transferred
+%%
+%%  All roles are always defined (never left empty) so that forest node
+%%  styles can reference them unconditionally -- forest cannot parse
+%%  \if...\fi guards inside \forestset key definitions.
+%%
+%%  To define a custom scheme after loading the package simply redefine
+%%  any of these colours with \colorlet or \definecolor, e.g.:
+%%    \colorlet{minsyn@sel}{violet}
+%%----------------------------------------------------------------------
+
+%% -- scheme: default ----------------------------------------------
+%% Steel blue frame, classic hue-coded badges.
+\definecolor{minsyn@wsbg}{RGB}{236,244,252}
+\definecolor{minsyn@wsfr}{RGB}{ 60,120,180}
+\definecolor{minsyn@sel} {RGB}{  0,128,  0}
+\definecolor{minsyn@em}  {RGB}{ 30,100,200}
+\definecolor{minsyn@im}  {RGB}{180, 30, 30}
+\definecolor{minsyn@la}  {RGB}{120,  0,180}
+\definecolor{minsyn@tr}  {RGB}{110,110,110}
+\definecolor{minsyn@badgetxt}{RGB}{255,255,255}   % badge text -- white on dark backgrounds
+\definecolor{minsyn@adjbg}  {RGB}{255,248,220}   % Pair-Merge adjunct plane fill (warm cream)
+\definecolor{minsyn@adjfr}  {RGB}{155, 95, 15}   % Pair-Merge adjunct plane frame (amber-brown)
+\definecolor{minsyn@pm}     {RGB}{200, 95,  0}   % Pair-Merge arrow / badge (burnt orange)
+\definecolor{minsyn@box}    {RGB}{  0,100,110}   % Box Theory box border (dark teal)
+\definecolor{minsyn@sm}     {RGB}{148, 17,100}   % Self-Merge badge (deep magenta-purple)
+
+%% -- scheme: grayscale --------------------------------------------
+%% True black-and-white; badges rendered as [brackets] not filled pills.
+\newcommand{\minsyn@scheme@grayscale}{%
+  \colorlet{minsyn@wsbg}{black!6}%
+  \colorlet{minsyn@wsfr}{black}%
+  \colorlet{minsyn@sel} {black}%
+  \colorlet{minsyn@em}  {black}%
+  \colorlet{minsyn@im}  {black}%
+  \colorlet{minsyn@la}  {black}%
+  \colorlet{minsyn@tr}  {black!45}%
+  \colorlet{minsyn@box}{black!80}%
+  \colorlet{minsyn@sm} {black}%
+  \colorlet{minsyn@badgetxt}{white}%
+}
+
+%% -- scheme: ocean ------------------------------------------------
+%% Deep teal frame with cyan / blue / green badge palette.
+\newcommand{\minsyn@scheme@ocean}{%
+  \definecolor{minsyn@wsbg}{RGB}{230,248,250}%
+  \definecolor{minsyn@wsfr}{RGB}{ 10,120,130}%
+  \definecolor{minsyn@sel} {RGB}{  0,160,140}%
+  \definecolor{minsyn@em}  {RGB}{  0,100,170}%
+  \definecolor{minsyn@im}  {RGB}{ 30,160,210}%
+  \definecolor{minsyn@la}  {RGB}{  0, 80,100}%
+  \definecolor{minsyn@tr}  {RGB}{120,160,165}%
+  \definecolor{minsyn@box}{RGB}{180,120,  0}%
+  \definecolor{minsyn@sm} {RGB}{ 80,  0,140}%
+  \colorlet{minsyn@badgetxt}{white}%
+}
+
+%% -- scheme: sepia ------------------------------------------------
+%% Warm brown frame with amber / ochre / terracotta badge palette.
+%% Well suited to print or a classic humanities aesthetic.
+\newcommand{\minsyn@scheme@sepia}{%
+  \definecolor{minsyn@wsbg}{RGB}{252,245,232}%
+  \definecolor{minsyn@wsfr}{RGB}{130, 80, 30}%
+  \definecolor{minsyn@sel} {RGB}{ 90,130, 30}%
+  \definecolor{minsyn@em}  {RGB}{160, 90, 20}%
+  \definecolor{minsyn@im}  {RGB}{190, 50, 20}%
+  \definecolor{minsyn@la}  {RGB}{140, 60,  0}%
+  \definecolor{minsyn@tr}  {RGB}{170,150,120}%
+  \definecolor{minsyn@box}{RGB}{  0,100, 80}%
+  \definecolor{minsyn@sm} {RGB}{100,  0, 80}%
+  \colorlet{minsyn@badgetxt}{white}%   dark badges -- white text legible
+}
+
+%% -- scheme: accessible -------------------------------------------
+%% Deuteranopia-safe palette (avoids red/green confusion).
+%% Based on the Wong (2011) and IBM accessible palettes.
+\newcommand{\minsyn@scheme@accessible}{%
+  \definecolor{minsyn@wsbg}{RGB}{235,240,255}%
+  \definecolor{minsyn@wsfr}{RGB}{ 50, 90,180}%
+  \definecolor{minsyn@sel} {RGB}{  0,158,115}%   teal-green (safe)
+  \definecolor{minsyn@em}  {RGB}{ 50, 90,180}%   blue
+  \definecolor{minsyn@im}  {RGB}{213, 94,  0}%   vermillion-orange
+  \definecolor{minsyn@la}  {RGB}{  0,114,178}%   sky blue
+  \definecolor{minsyn@tr}  {RGB}{145,145,145}%   neutral grey
+  \definecolor{minsyn@box}{RGB}{  0,158,115}%
+  \definecolor{minsyn@sm} {RGB}{204,121,167}%
+  \colorlet{minsyn@badgetxt}{white}%
+}
+
+%% -- apply chosen scheme at load time ---------------------------
+\ifx\minsyn@scheme\@empty\else
+  \ifcsname minsyn@scheme@\minsyn@scheme\endcsname
+    \csname minsyn@scheme@\minsyn@scheme\endcsname
+  \fi
+\fi
+
+%% \minsynsetscheme{name}
+%%   Public command to switch colour scheme anywhere in a document.
+%%   Valid names: default, grayscale, ocean, sepia, accessible.
+%%   Switching to grayscale also disables filled badge pills;
+%%   switching to any other scheme re-enables them.
+%%
+%%   Example (in document body):
+%%     \minsynsetscheme{ocean}
+%%     \minsynsetscheme{grayscale}
+%%
+\newcommand{\minsynsetscheme}[1]{%
+  \ifcsname minsyn@scheme@#1\endcsname
+    \csname minsyn@scheme@#1\endcsname
+    %% grayscale turns off badge fills; every other scheme turns them on
+    \expandafter\ifx\csname minsyn@scheme@#1\endcsname\minsyn@scheme@grayscale
+      \minsyn@colorfalse
+    \else
+      \minsyn@colortrue
+    \fi
+  \else
+    \PackageWarning{minsyn}{Unknown colour scheme '#1' -- ignored}%
+  \fi
+}
+
+%%----------------------------------------------------------------------
+%% 3.  Internal helpers
+%%----------------------------------------------------------------------
+
+%% \minsyn@badge{colour}{label}
+%%   Renders a small, filled pill badge (or plain brackets in nocolor mode).
+\newcommand{\minsyn@badge}[2]{%
+  \ifminsyn@color
+    \colorbox{#1}{\,%
+      \textcolor{minsyn@badgetxt}{\footnotesize\bfseries\sffamily\vphantom{Ag}#2}%
+    \,}%
+  \else
+    \mbox{\small[\textsf{#2}]}%
+  \fi
+}
+
+%% \minsyn@col{colour}{text}   -- conditionally coloured text
+\newcommand{\minsyn@col}[2]{%
+  \ifminsyn@color\textcolor{#1}{#2}\else#2\fi
+}
+
+%%----------------------------------------------------------------------
+%% 4.  Step counter
+%%----------------------------------------------------------------------
+\newcounter{minsyn@step}
+
+%%======================================================================
+%% A.  LEXICAL ITEMS
+%%======================================================================
+%%
+%%  \LI{word}           italic lexical item; safe in text AND math mode
+%%  \LIf{word}{feats}   with feature bundle subscript,  e.g. \LIf{v*}{uF}
+%%  \LA[n]{feats}       lexical array, optional subscript n
+%%
+%% Plain \newcommand avoids xparse/forest tokeniser conflict in LuaLaTeX.
+\newcommand{\LI}[1]{\text{\textit{#1}}}
+%% Plain \newcommand; subscript in \mbox{$...$} for LuaLaTeX math font.
+\newcommand{\LIf}[2]{\text{\textit{#1}}\mbox{${}_{[#2]}$}}
+\NewDocumentCommand{\LexArray}{O{}m}{%
+  \ensuremath{\mathrm{LA}%
+    \ifstrempty{#1}{}{_{\mathrm{#1}}}%
+    = \{#2\}%
+  }%
+}
+
+%%======================================================================
+%% B.  SYNTACTIC OBJECTS  (set-theoretic notation)
+%%
+%%  All commands below operate in MATH MODE.
+%%  In running text wrap them in $???$ or \ensuremath{???}.
+%%======================================================================
+%%
+%%  \SOset{??}{??}              plain binary SO:          {??, ??}
+%%  \SOlabel{L}{??}{??}         labelled binary SO:       {???L??? : {??, ??}}
+%%  \SOls{L}{SO}              labelled, pre-built SO:   {???L??? : SO}
+%%  \Atom{x}                  singleton / LI-as-atom:   {x}
+%%  \Copy{SO}                 lower copy (dashed box)   ???SO???
+%%  \Transferred{SO}          transferred SO -- grey strikethrough
+%%
+%% For deeply nested expressions use the \big??? delimiter variants
+%% or the starred forms \SOset*{??}{??} which use \left/\right.
+%%----------------------------------------------------------------------
+\NewDocumentCommand{\SOset}{sm m}{%
+  \IfBooleanTF{#1}%
+    {\left\{\,#2,\mkern4mu#3\,\right\}}%
+    {\{\,#2,\mkern4mu#3\,\}}%
+}
+\NewDocumentCommand{\SOlabel}{s m m m}{%
+  \IfBooleanTF{#1}%
+    {\left\{\,\langle #2\rangle \mathbin{:} \left\{\,#3,\mspace{3mu}#4\,\right\}\,\right\}}%
+    {\bigl\{\,\langle #2\rangle \mathbin{:} \{\,#3,\mspace{3mu}#4\,\}\,\bigr\}}%
+}
+\NewDocumentCommand{\SOls}{s m m}{%
+  \IfBooleanTF{#1}%
+    {\left\{\,\langle #2\rangle \mathbin{:} #3\,\right\}}%
+    {\bigl\{\,\langle #2\rangle \mathbin{:} #3\,\bigr\}}%
+}
+\NewDocumentCommand{\Atom}{m}{\{\,#1\,\}}
+\NewDocumentCommand{\Copy}{m}{\langle #1\rangle}        % lower copy
+
+\NewDocumentCommand{\SOpm}{s m m}{%
+  %% \SOpm{??}{??}   ??? ?????, ?????   (Pair-Merge ordered pair)
+  %% \SOpm*{??}{??}  ??? auto-sized delimiters
+  \IfBooleanTF{#1}%
+    {\left\langle\!\left\langle\,#2,\mspace{3mu}#3\,\right\rangle\!\right\rangle}%
+    {\langle\!\langle\,#2,\mspace{3mu}#3\,\rangle\!\rangle}%
+}
+\NewDocumentCommand{\Transferred}{m}{%
+  \minsyn@col{minsyn@tr}{\ensuremath{\bcancel{#1}}}%
+}
+
+%%======================================================================
+%% C.  OPERATIONS
+%%======================================================================
+%%
+%%  Each command produces a colour-coded badge followed by its argument.
+%%  These work in TEXT mode (for use in \WSstep and prose).
+%%
+%%  \Select{LI}            Select( LI )
+%%  \ExtMerge{??}{??}        Merge( ?? , ?? )      [external]
+%%  \IntMerge{??}{??}        iMerge( ?? , ?? )     [internal / movement]
+%%  \LabelOp{X}            LA( X )
+%%  \SpellOut{SO}          Transfer( SO )
+%%
+%%  Tips:
+%%    *  Pass \LI{word} or $\alpha$ as arguments.
+%%    *  Use these inside \WSstep[???] to annotate derivation arrows.
+%%----------------------------------------------------------------------
+%%======================================================================
+%% G.  BOX THEORY (Tsoulas-style)
+%%======================================================================
+%%
+%%  \BOX{X}
+%%    Draws a coloured rectangle around SO X.  Works in text and math
+%%    mode.  Uses colour minsyn@box (dark teal in default scheme).
+%%
+%%  \minsyn@boxsub{X}
+%%    Internal subscript-size version for workspace title bars.
+%%
+%%  \begin{workspacebox}[op]{X}
+%%    Like workspace but the title shows W^n_{[X]} (W with a numerical
+%%    superscript and a subscript that is a small box containing X).
+%%
+%%  \WSeqBox{boxed}{items}
+%%    Like \WSeq but the display math header reads W^n_{[X]} = {...}.
+%%    Use inside a workspacebox (or standalone).
+%%
+%%  \WSeqBoxTree{boxed}{items}{tree}
+%%    Like \WSeqTree but with the W^n_{[X]} notation in the header.
+%%----------------------------------------------------------------------
+\newcommand{\BOX}[1]{%
+  \tikz[baseline=(minsyn@Bbox.base), inner sep=0pt, outer sep=0pt]{%
+    \node[draw=minsyn@box, line width=1.2pt, inner sep=2.5pt,
+          outer sep=0pt, rounded corners=1.5pt]
+          (minsyn@Bbox) {\ensuremath{#1}};%
+  }%
+}
+
+%% Subscript-size box for W^n_{[X]} workspace titles
+\newcommand{\minsyn@boxsub}[1]{%
+  \tikz[baseline=(minsyn@Bsub.base), inner sep=0pt, outer sep=0pt]{%
+    \node[draw=minsyn@box, line width=0.75pt, inner sep=1.2pt,
+          font=\footnotesize\rmfamily, outer sep=0pt, rounded corners=1pt]
+          (minsyn@Bsub) {\ensuremath{\scriptscriptstyle #1}};%
+  }%
+}
+
+%% workspacebox environment: title shows W^{n}_{[X]}
+\newenvironment{workspacebox}[2][]{%
+  \stepcounter{minsyn@step}%
+  \begin{tcolorbox}[%
+    minsyn@wsbox,%
+    title={$W^{\protect\arabic{minsyn@step}}_{\minsyn@boxsub{#2}}$%
+      \ifstrempty{#1}{}{\enspace\textbar\enspace\normalfont\small #1}%
+    }%
+  ]%
+}{%
+  \end{tcolorbox}%
+}
+
+%% \WSeqBox{boxed-element}{set-items}
+%%   Display math: W^n_{[X]} = { items }
+\NewDocumentCommand{\WSeqBox}{m m}{%
+  \leavevmode\par\noindent\hfill
+  $\displaystyle
+    W^{\protect\arabic{minsyn@step}}_{\minsyn@boxsub{#1}} \mathrel{=}
+    \left\{\mspace{3mu} #2 \mspace{3mu}\right\}
+  $\hfill\null\par
+}
+
+%% \WSeqBoxTree{boxed-element}{set-items}{tree-content}
+%%   Like \WSeqTree with boxed workspace notation in the header.
+\NewDocumentCommand{\WSeqBoxTree}{m m m}{%
+  \leavevmode\par\noindent\hfill
+  $\displaystyle
+    W^{\protect\arabic{minsyn@step}}_{\minsyn@boxsub{#1}} \mathrel{=}
+    \left\{\mspace{3mu} #2 \mspace{3mu}\right\}
+  $\hfill\null\par
+  \vspace{2pt}%
+  {\color{minsyn@wsfr}\hrule height 0.6pt}%
+  \vspace{6pt}%
+  \leavevmode\par\noindent\hfill
+  \begin{forest} #3 \end{forest}%
+  \hfill\null\par
+}
+
+
+%% Note: operation args are rendered in math mode via \ensuremath.
+%% Pass \LI{word} for lexical items, \SOset{...}{...} for SOs, $\alpha$ for symbols.
+\NewDocumentCommand{\Select}{m}{%
+  %% Arg displayed directly (not via \LI) so \Select{$v^*$} works.
+  \minsyn@badge{minsyn@sel}{Select}\,%
+  \minsyn@col{minsyn@sel}{\textup{(}#1\textup{)}}%
+}
+\NewDocumentCommand{\ExtMerge}{mm}{%
+  \minsyn@badge{minsyn@em}{Merge}\,%
+  \minsyn@col{minsyn@em}{\textup{(}\ensuremath{#1}\textup{,\,}\ensuremath{#2}\textup{)}}%
+}
+\NewDocumentCommand{\IntMerge}{mm}{%
+  \minsyn@badge{minsyn@im}{iMerge}\,%
+  \minsyn@col{minsyn@im}{\textup{(}\ensuremath{#1}\textup{,\,}\ensuremath{#2}\textup{)}}%
+}
+\NewDocumentCommand{\LabelOp}{m}{%
+  \minsyn@badge{minsyn@la}{LA}\,%
+  \minsyn@col{minsyn@la}{\textup{(}\ensuremath{#1}\textup{)}}%
+}
+\NewDocumentCommand{\SpellOut}{m}{%
+  \minsyn@badge{minsyn@tr}{Transfer}\,%
+  \minsyn@col{minsyn@tr}{\textup{(}\ensuremath{#1}\textup{)}}%
+}
+
+%%======================================================================
+%% D.  WORKSPACE ENVIRONMENT
+%%======================================================================
+%%
+%%  \begin{workspace}[optional operation note]
+%%    \WSeq{ SO_1, SO_2, \ldots }
+%%    ??? or free content (trees, tables, prose) ???
+%%  \end{workspace}
+%%
+%%  The workspace box is auto-numbered  W_1, W_2, ???
+%%  The optional argument appears in the title bar after the step number.
+%%
+%%  \WSeq{items}
+%%    Typesets  W_n = { items }  in display math.
+%%    Items should be separated by commas; use \SOset, \SOlabel, \LI, etc.
+%%    Only meaningful inside a workspace environment.
+%%
+%%  \WSstep[operation]
+%%    Draws  ???  with an optional operation label centred below it.
+%%    Place between two workspace environments.
+%%    Typically pass one of the operation commands (\Select, \ExtMerge, ???).
+%%
+%%  \begin{derivation} ??? \end{derivation}
+%%    Convenience wrapper: resets step counter, centres content,
+%%    restricts width to 0.92\linewidth.
+%%----------------------------------------------------------------------
+
+%% tcolorbox base style
+\tcbset{
+  minsyn@wsbox/.style={
+    enhanced,
+    colback  = minsyn@wsbg,
+    colframe = minsyn@wsfr,
+    arc=5pt, boxrule=0.9pt,
+    fonttitle = \small\sffamily\bfseries,
+    coltitle  = white,
+    attach boxed title to top left={yshift=-2.5mm, xshift=6mm},
+    boxed title style={
+      colback  = minsyn@wsfr,
+      colframe = minsyn@wsfr,
+      arc=3pt, boxrule=0pt,
+      top=2pt, bottom=2pt, left=6pt, right=6pt,
+    },
+    left=10pt, right=10pt, top=10pt, bottom=8pt,
+    before skip=4pt, after skip=2pt,
+  }
+}
+
+%% workspace environment
+\newenvironment{workspace}[1][]{%
+  \stepcounter{minsyn@step}%
+  \def\minsyn@opnote{#1}%
+  \begin{tcolorbox}[%
+    minsyn@wsbox,%
+    title={$W_{\protect\arabic{minsyn@step}}$%
+      \ifstrempty{#1}{}{\enspace\textbar\enspace\normalfont\small #1}%
+    }%
+  ]%
+}{%
+  \end{tcolorbox}%
+}
+
+%% \WSeq{items}  --  workspace set equation, notation only
+\newcommand{\WSeq}[1]{%
+  %% \leavevmode+\hfill centering avoids the egin{center} group
+  %% boundary that breaks $\displaystyle inside tcolorbox in Beamer.
+  %% \left\{...\right\} auto-sizes and is robust with OpenType math.
+  \leavevmode\par\noindent\hfill
+  $\displaystyle
+    W_{\protect\arabic{minsyn@step}} \mathrel{=}
+    \left\{\mspace{3mu} #1 \mspace{3mu}\right\}
+  $\hfill\null\par
+}
+
+%% \WSeqTree{set-items}{tree-content}
+%%
+%%   Typesets the set-theoretic SO notation centred at the top, then a
+%%   thin horizontal rule in the workspace frame colour, then the forest
+%%   tree centred below.  Both elements have the full box width so there
+%%   is no overflow and no scaling.
+%%
+%%   Arguments:
+%%     {set-items}    Comma-separated SOs, as for \WSeq{}.
+%%     {tree-content} A complete forest tree whose root node carries SOtree.
+%%
+%%   Example:
+%%     \begin{workspace}[Merge(saw, Mary)]
+%%       \WSeqTree
+%%         { \SOlabel{V}{\LI{saw}}{\LI{Mary}} }
+%%         { [VP, SOtree, SOphase [V, SOhead [{\LI{saw}}, SOlexical]]
+%%                                [DP       [{\LI{Mary}}, SOlexical]]] }
+%%     \end{workspace}
+%%
+\NewDocumentCommand{\WSeqTree}{m m}{%
+  %% -- set-theoretic notation ---------------------------------------
+  \leavevmode\par\noindent\hfill
+  $\displaystyle
+    W_{\protect\arabic{minsyn@step}} \mathrel{=}
+    \left\{\mspace{3mu} #1 \mspace{3mu}\right\}
+  $\hfill\null\par
+  %% -- horizontal divider -------------------------------------------
+  \vspace{2pt}%
+  {\color{minsyn@wsfr}\hrule height 0.6pt}%
+  \vspace{6pt}%
+  %% -- tree ---------------------------------------------------------
+  \leavevmode\par\noindent\hfill
+  \begin{forest} #2 \end{forest}%
+  \hfill\null\par
+}
+
+
+
+\NewDocumentCommand{\PairMerge}{mm}{%
+  \minsyn@badge{minsyn@pm}{PM}\,%
+  \minsyn@col{minsyn@pm}{\textup{(}\ensuremath{#1}\textup{,\,}\ensuremath{#2}\textup{)}}%
+}
+
+\NewDocumentCommand{\BoxOp}{m}{%
+  \minsyn@badge{minsyn@box}{Box}\,%
+  \minsyn@col{minsyn@box}{\textup{(}\ensuremath{#1}\textup{)}}%
+}
+
+
+\NewDocumentCommand{\SelfMergeI}{}{%
+  \minsyn@badge{minsyn@sm}{SM1}%
+}
+\NewDocumentCommand{\SelfMergeII}{m}{%
+  \minsyn@badge{minsyn@sm}{SM2}\,%
+  \minsyn@col{minsyn@sm}{\textup{(}\ensuremath{#1}\textup{)}}%
+}
+\NewDocumentCommand{\SelfMergeIII}{m}{%
+  \minsyn@badge{minsyn@box}{SM3}\,%
+  \minsyn@col{minsyn@box}{\textup{(}\ensuremath{#1}\textup{)}}%
+}%% \WSstep[operation]  --  inter-workspace derivation arrow
+\NewDocumentCommand{\WSstep}{O{}}{%
+  \vspace{2pt}%
+  \leavevmode\par\noindent\hfill
+  \ifstrempty{#1}{%
+    $\Big\downarrow$%
+  }{%
+    \begin{tabular}{c}%
+      $\Big\downarrow$\\[1pt]%
+      \small #1%
+    \end{tabular}%
+  }%
+  \hfill\null\par
+  \vspace{2pt}%
+}
+
+%% derivation environment
+\newenvironment{derivation}{%
+  \setcounter{minsyn@step}{0}%
+  \par\noindent\hfill
+  \begin{minipage}{0.92\linewidth}%
+}{%
+  \end{minipage}%
+  \hfill\null\par
+}
+
+%%======================================================================
+%% E.  TREE DISPLAY  (skipped when [notrees] option is active)
+%%======================================================================
+%%
+%%  Forest styles:
+%%
+%%    SOtree      Base style applied to all SO trees; sets sane defaults.
+%%    SOhead      Mark a head node (bold + italic).
+%%    SOlexical   Mark a terminal / lexical node (italic).
+%%    SOtrace     Lower copy / trace: greyed-out, dashed border.
+%%    SOmoved     Higher copy / moved element: coloured border.
+%%    SOphase     Phase head: light-filled box.
+%%    SOprojection Intermediate projection label.
+%%
+%%  Shorthand tree environments:
+%%
+%%    \begin{SOtree} [ ??? forest content ??? ] \end{SOtree}
+%%      Centred forest tree with SOtree style applied.
+%%
+%%  Example:
+%%    \begin{SOtree}
+%%      [VP, SOphase
+%%        [V, SOhead [\LI{sees}, SOlexical]]
+%%        [DP, SOphase
+%%          [D, SOhead [\LI{him}, SOlexical]]
+%%        ]
+%%      ]
+%%    \end{SOtree}
+%%----------------------------------------------------------------------
+\ifminsyn@trees
+
+\forestset{
+  %% -- base style ---------------------------------------------------
+  %% Applied to the root node of every \SOtree{} call.
+  SOtree/.style={
+    for tree={
+      parent anchor = south,
+      child anchor  = north,
+      align         = center,
+      base          = bottom,
+      inner sep     = 3pt,
+      l sep         = 14pt,
+      s sep         = 20pt,
+      edge          = {semithick},
+      font          = \normalsize,
+    },
+  },
+  %% -- node type styles ---------------------------------------------
+  SOhead/.style={
+    font = \bfseries\itshape,
+  },
+  SOlexical/.style={
+    font = \itshape,
+  },
+  %% NOTE: colour names are always defined (neutralised in nocolor mode)
+  %% so no \if guards are needed here -- forest cannot parse \ifminsyn@color.
+  SOtrace/.style={
+    draw          = minsyn@tr,
+    dashed,
+    rounded corners = 3pt,
+    text          = minsyn@tr,
+    font          = \itshape,
+  },
+  SOmoved/.style={
+    draw          = minsyn@im,
+    rounded corners = 3pt,
+    very thick,
+    edge/.append style = {
+      draw      = minsyn@im,
+      very thick,
+      dashed,
+    },
+  },
+  SOphase/.style={
+    draw          = minsyn@wsfr,
+    fill          = minsyn@wsbg,
+    rounded corners = 3pt,
+  },
+  SOadjunct/.style={
+    draw          = minsyn@adjfr,
+    fill          = minsyn@adjbg,
+    rounded corners = 3pt,
+    thick,
+    font          = \itshape,
+  },
+  %% -- Self-Merge node styles -------------------------------------------
+  %%  SMroot   marks the root of a self-merged SO (ring marker)
+  %%  SMcopy   marks each copy in SM1/SM2 structures
+  %%  SM1edge  applied to the single child in an SM1 tree: dotted edge
+  %%  SObox    draws a Box-Theory box around a node (minsyn@box colour)
+  SMroot/.style={
+    circle, draw=minsyn@sm, fill=minsyn@sm!12,
+    thick, inner sep=2pt,
+    edge/.append style={draw=minsyn@sm, thick},
+  },
+  SMcopy/.style={
+    draw=minsyn@sm, dashed, thick,
+    rounded corners=2pt,
+    font=\itshape,
+  },
+  SM1edge/.style={
+    edge/.style={draw=minsyn@sm, thick, dotted, line width=1.2pt},
+  },
+  SObox/.style={
+    draw=minsyn@box, very thick,
+    inner sep=4pt,
+  },
+  SOprojection/.style={
+    font = \small,
+  },
+  %% -- movement arc style (TikZ) ------------------------------------
+  %% Use with \draw[minsyn@movearrow] (low-copy) to[bend left=40] (high-copy);
+  minsyn@movearrow/.style={
+    ->,
+    draw      = minsyn@im,
+    dashed,
+    very thick,
+  },
+}
+
+%% \SOtree{tree-content}
+%%   Typesets a centred forest tree.  The SOtree base style is injected
+%%   directly at the root node so forest doesn't need a preamble argument.
+%%   The entire tree content (from the opening [ to the final ]) goes in {}.
+%%
+%%   Example:
+%%     \SOtree{[VP, SOphase [V, SOhead [\LI{saw}, SOlexical]] [DP [\LI{Mary}]]]}
+\newcommand{\SOtree}[1]{%
+  \leavevmode\par\noindent\hfill
+  \begin{forest}%
+    #1%
+  \end{forest}%
+  \hfill\null\par
+}
+
+%%======================================================================
+%% F.  PAIR-MERGE / 3D PERSPECTIVE DISPLAY
+%%======================================================================
+%%
+%%  \PMtree{main-tree}{adj-tree}
+%%
+%%    Renders two forest trees in a TikZ picture that mimics 3D space:
+%%
+%%      * The main Set-Merge tree sits on a "front plane" (workspace colour).
+%%      * The Pair-Merged adjunct tree sits on a "tilted slab" (cream/amber)
+%%        offset upper-right, with visible left and bottom depth faces that
+%%        suggest a second structural dimension.
+%%      * A curved dashed arrow in PM orange sweeps from the lower-left
+%%        corner of the adjunct slab to the upper-right of the main plane,
+%%        labelled ?????,?????.
+%%
+%%    Arguments:
+%%      {main-tree}   Forest content (root must carry SOtree).
+%%      {adj-tree}    Forest content for the adjunct SO (root carries SOtree).
+%%
+%%    User-adjustable lengths (change with \setlength before \PMtree):
+%%      \PMdx   horizontal offset of adjunct plane  (default 2.4cm)
+%%      \PMdy   vertical   offset of adjunct plane  (default 1.8cm)
+%%      \PMdpx  perspective depth, x component      (default 0.55cm)
+%%      \PMdpy  perspective depth, y component      (default 0.32cm)
+%%
+%%  \WSeqPMtree{set-notation}{main-tree}{adj-tree}
+%%
+%%    Like \WSeqTree but uses \PMtree for the tree portion.
+%%    The set-notation argument should typically use \SOpm{??}{??}.
+%%
+%%----------------------------------------------------------------------
+\newsavebox{\minsyn@pmainbox}
+\newsavebox{\minsyn@padjbox}
+
+\newlength{\PMdx}  \setlength{\PMdx}{2.4cm}    % adjunct plane x-offset
+\newlength{\PMdy}  \setlength{\PMdy}{1.8cm}     % adjunct plane y-offset
+\newlength{\PMdpx} \setlength{\PMdpx}{0.55cm}   % depth vector x
+\newlength{\PMdpy} \setlength{\PMdpy}{0.32cm}   % depth vector y
+
+\NewDocumentCommand{\PMtree}{m m}{%
+  \sbox{\minsyn@pmainbox}{\begin{forest} #1 \end{forest}}%
+  \sbox{\minsyn@padjbox} {\begin{forest} #2 \end{forest}}%
+  \begin{tikzpicture}[baseline=(maintree.south)]
+    %% -- place tree boxes (main layer) --------------------------------
+    \node[inner sep=8pt]  (maintree) {\usebox{\minsyn@pmainbox}};
+    \node[inner sep=8pt]  (adjtree)
+      at ($(maintree.north east)+(\PMdx,\PMdy)$)
+      {\usebox{\minsyn@padjbox}};
+    %% -- draw planes in background layer ------------------------------
+    %% (all pgfonlayer drawing is deferred until after coordinates are
+    %%  fully resolved, so node corners are safe to reference here)
+    \begin{pgfonlayer}{minsyn@background}
+      %% Compute three "back" corners of the adjunct slab
+      %% (depth direction = lower-left, i.e. going "into the page")
+      \coordinate (adj@sw@b) at
+        ($(adjtree.south west)+(-\PMdpx,-\PMdpy)$);
+      \coordinate (adj@nw@b) at
+        ($(adjtree.north west)+(-\PMdpx,-\PMdpy)$);
+      \coordinate (adj@se@b) at
+        ($(adjtree.south east)+(-\PMdpx,-\PMdpy)$);
+      %% Bottom face of slab (below the front face, darker tint)
+      \filldraw[fill=minsyn@adjbg!50, draw=minsyn@adjfr, line width=0.45pt]
+        (adjtree.south west) -- (adj@sw@b) --
+        (adj@se@b) -- (adjtree.south east) -- cycle;
+      %% Left face of slab (left side, medium tint)
+      \filldraw[fill=minsyn@adjbg!35, draw=minsyn@adjfr, line width=0.45pt]
+        (adjtree.south west) -- (adj@sw@b) --
+        (adj@nw@b) -- (adjtree.north west) -- cycle;
+      %% Internal back edges
+      \draw[minsyn@adjfr, line width=0.4pt]
+        (adj@sw@b) -- (adj@nw@b);
+      \draw[minsyn@adjfr, line width=0.4pt]
+        (adj@sw@b) -- (adj@se@b);
+      %% Front face of adjunct slab (full fill, drawn on top of side faces)
+      \filldraw[fill=minsyn@adjbg, draw=minsyn@adjfr, line width=0.8pt,
+                rounded corners=3pt]
+        (adjtree.south west) rectangle (adjtree.north east);
+      %% Main plane (drawn last in background so it covers adjunct overlap)
+      \filldraw[fill=minsyn@wsbg, draw=minsyn@wsfr, line width=0.9pt,
+                rounded corners=4pt]
+        (maintree.south west) rectangle (maintree.north east);
+    \end{pgfonlayer}
+    %% -- Pair-Merge curved arrow (main layer) -------------------------
+    \draw[-latex, dashed, line width=1.1pt, color=minsyn@pm]
+      (adjtree.south west)
+      to[out=220, in=70]
+      ($(maintree.north east)+(-5pt,-5pt)$);
+    %% PM label, positioned at mid-point of the arrow
+    \node[font=\small\itshape, color=minsyn@pm,
+          at=($(adjtree.south west)!0.48!(maintree.north east)$),
+          xshift=10pt, yshift=2pt]
+      {$\langle\!\langle\cdot,\cdot\rangle\!\rangle$};
+  \end{tikzpicture}%
+}
+
+%% \WSeqPMtree{set-notation}{main-tree}{adj-tree}
+%%   Variant of \WSeqTree for Pair-Merge workspaces.
+%%   The set-notation argument should use \SOpm{...}{...}.
+\NewDocumentCommand{\WSeqPMtree}{m m m}{%
+  \leavevmode\par\noindent\hfill
+  $\displaystyle
+    W_{\protect\arabic{minsyn@step}} \mathrel{=}
+    \left\{\mspace{3mu} #1 \mspace{3mu}\right\}
+  $\hfill\null\par
+  \vspace{2pt}%
+  {\color{minsyn@wsfr}\hrule height 0.6pt}%
+  \vspace{8pt}%
+  \leavevmode\par\noindent\hfill
+  \PMtree{#2}{#3}%
+  \hfill\null\par
+}
+
+\fi  %% end \ifminsyn@trees
+
+%%======================================================================
+%%  End of minsyn.sty
+%%======================================================================
+\endinput
