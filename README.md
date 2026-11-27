@@ -28,12 +28,16 @@ after the lectures.
 This is a working version. It has not yet taken in all the comments and
 questions raised at the sessions, and later versions will be released here.
 Comments and corrections are welcome, especially on the Japanese and Korean
-data: please open an issue or write to [contact address].
+data: please open an issue or write to
+[george.tsoulas@york.ac.uk](mailto:george.tsoulas@york.ac.uk).
 
 ## Download
 
 The PDF is [`Keio-LectureNotes.pdf`](Keio-LectureNotes.pdf). Each release
-is also archived on Zenodo: [doi:10.5281/zenodo.24495824](https://doi.org/10.5281/zenodo.24495824).
+is also archived on Zenodo: version 1.0 is
+[doi:10.5281/zenodo.24495824](https://doi.org/10.5281/zenodo.24495824), and
+[doi:10.5281/zenodo.24495823](https://doi.org/10.5281/zenodo.24495823)
+always resolves to the latest version.
 
 ## How to cite
 
